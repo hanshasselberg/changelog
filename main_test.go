@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/config"
+	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/storage/memory"
 )
 
@@ -40,6 +41,14 @@ func TestBranches(t *testing.T) {
 	bs, err := branches(r)
 	require.NoError(t, err)
 	require.Len(t, bs, 3)
+}
+
+func TestCommits(t *testing.T) {
+	r := testRepo(t)
+	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
+	commits, err := commits(r, ref)
+	require.NoError(t, err)
+	t.Log(commits)
 }
 
 func TestChangelogFor(t *testing.T) {
