@@ -4,24 +4,14 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
+	"strings"
 
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	"gopkg.in/src-d/go-git.v4/storage/memory"
 )
-
-type changelog struct {
-	branches []*plumbing.Reference
-}
-
-func newChangelog() *changelog {
-	return &changelog{branches: []*plumbing.Reference{}}
-}
-
-func (c *changelog) add(r *plumbing.Reference) {
-	c.branches = append(c.branches, r)
-}
 
 func main() {
 	r, err := git.Clone(memory.NewStorage(), nil, &git.CloneOptions{
@@ -31,25 +21,23 @@ func main() {
 		fmt.Println("error cloning:", err)
 		os.Exit(1)
 	}
-	bs, err := branches(r)
+	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
+	c, err := newChangelog(r, ref)
 	if err != nil {
-		fmt.Println("error branches:", err)
+		fmt.Println("error changelog:", err)
 		os.Exit(1)
 	}
-
-	c := changelog{}
-	for _, b := range bs {
-		c.add(b)
-	}
+	fmt.Println(c.Changelog())
 }
 
-var releaseRegex = regexp.MustCompile(`refs\/remotes\/\w+\/release\/`) // panic if regexp invalid
+var releaseBranchRegex = regexp.MustCompile(`^refs\/remotes\/\w+\/release\/\d+\.\d+\.x$`)
+var releaseTagRegex = regexp.MustCompile(`^refs\/tags\/v(\d+\.\d+\.\d+)$`)
 
 func isReleaseBranch(b string) bool {
 	if b == "refs/heads/master" {
 		return true
 	}
-	if releaseRegex.MatchString(b) {
+	if releaseBranchRegex.MatchString(b) {
 		return true
 	}
 	return false
@@ -75,11 +63,71 @@ func branches(r *git.Repository) ([]*plumbing.Reference, error) {
 		return nil, err
 	}
 	refs.ForEach(func(ref *plumbing.Reference) error {
-		fmt.Println("ref", ref.Name().String(), ref.Name().IsBranch())
 		if isReleaseBranch(ref.Name().String()) {
 			branches = append(branches, ref)
 		}
 		return nil
 	})
 	return branches, nil
+}
+
+type changelog struct {
+	repository *git.Repository
+	commits    []*object.Commit
+}
+
+func newChangelog(r *git.Repository, b *plumbing.Reference) (*changelog, error) {
+	commits, err := commits(r, b)
+	if err != nil {
+		return nil, err
+	}
+	return &changelog{repository: r, commits: commits}, nil
+}
+
+func hashToRelease(r *git.Repository) (map[string]string, error) {
+	ts, err := r.Tags()
+	if err != nil {
+		return nil, err
+	}
+	tagsMap := map[string]string{}
+	ts.ForEach(func(ref *plumbing.Reference) error {
+		if v := releaseTagRegex.FindStringSubmatch(ref.Name().String()); len(v) > 0 {
+			k, err := r.ResolveRevision(plumbing.Revision("v" + v[1]))
+			if err != nil {
+				return err
+			}
+			tagsMap[k.String()] = v[1]
+		}
+		return nil
+	})
+	return tagsMap, nil
+}
+
+func (c *changelog) Changelog() (string, error) {
+	hashToReleaseMap, err := hashToRelease(c.repository)
+	if err != nil {
+		return "", err
+	}
+	currRelease := "UNRELEASED"
+	releasesMap := map[string][]*object.Commit{currRelease: []*object.Commit{}}
+	for _, cm := range c.commits {
+		if r, ok := hashToReleaseMap[cm.Hash.String()]; ok {
+			currRelease = r
+			releasesMap[r] = []*object.Commit{}
+		}
+		releasesMap[currRelease] = append(releasesMap[currRelease], cm)
+	}
+	var releases sort.StringSlice
+	for r := range releasesMap {
+		releases = append(releases, r)
+	}
+	sort.Sort(sort.Reverse(releases))
+	result := []string{}
+	for _, r := range releases {
+		result = append(result, fmt.Sprintf("\n## %s\n", r))
+		for _, cm := range releasesMap[r] {
+			result = append(result, fmt.Sprintf("* %s", cm.Message))
+		}
+	}
+	return strings.Join(result, "\n"), nil
 }
