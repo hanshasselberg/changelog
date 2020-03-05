@@ -21,13 +21,19 @@ func main() {
 		fmt.Println("error opening:", err)
 		os.Exit(1)
 	}
-	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
-	c, err := newChangelog(r, ref)
+	hashToReleaseMap, err := hashToRelease(r)
 	if err != nil {
-		fmt.Println("error new changelog:", err)
+		fmt.Println("error hashToRelease:", err)
 		os.Exit(1)
 	}
-	md, err := c.Changelog()
+
+	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
+	commits, err := commits(r, ref)
+	if err != nil {
+		fmt.Println("error commits:", err)
+		os.Exit(1)
+	}
+	md, err := changelog(hashToReleaseMap, commits)
 	if err != nil {
 		fmt.Println("error changelog:", err)
 		os.Exit(1)
@@ -36,7 +42,6 @@ func main() {
 }
 
 var releaseBranchRegex = regexp.MustCompile(`^refs\/remotes\/\w+\/release\/\d+\.\d+\.x$`)
-var releaseTagRegex = regexp.MustCompile(`^v(\d+\.\d+\.\d+)$`)
 
 func isReleaseBranch(b string) bool {
 	if b == "refs/heads/master" {
@@ -76,18 +81,7 @@ func branches(r *git.Repository) ([]*plumbing.Reference, error) {
 	return branches, nil
 }
 
-type changelog struct {
-	repository *git.Repository
-	commits    []*object.Commit
-}
-
-func newChangelog(r *git.Repository, b *plumbing.Reference) (*changelog, error) {
-	commits, err := commits(r, b)
-	if err != nil {
-		return nil, err
-	}
-	return &changelog{repository: r, commits: commits}, nil
-}
+var releaseTagRegex = regexp.MustCompile(`^v(\d+\.\d+\.\d+)$`)
 
 func hashToRelease(r *git.Repository) (map[string]string, error) {
 	ts, err := r.TagObjects()
@@ -104,14 +98,34 @@ func hashToRelease(r *git.Repository) (map[string]string, error) {
 	return tagsMap, nil
 }
 
-func (c *changelog) Changelog() (string, error) {
-	hashToReleaseMap, err := hashToRelease(c.repository)
-	if err != nil {
-		return "", err
+var commitRegex = regexp.MustCompile(`^(fix|feat|impr|sec|note)\((\w+)\)!?: (.+)`)
+
+func validCommit(msg string) bool {
+	return commitRegex.MatchString(msg)
+}
+
+func formatCommit(msg string) (string, string) {
+	matches := commitRegex.FindStringSubmatch(msg)
+	cat := ""
+	switch matches[1] {
+	case "fix":
+		cat = "BUGFIX"
+	case "feat":
+		cat = "FEATURE"
+	case "impr":
+		cat = "IMPROVEMENT"
+	case "sec":
+		cat = "SECURITY"
+	case "note":
+		cat = "NOTE"
 	}
+	return cat, fmt.Sprintf("* %s: %s", matches[2], matches[3])
+}
+
+func changelog(hashToReleaseMap map[string]string, commits []*object.Commit) (string, error) {
 	currRelease := "UNRELEASED"
 	releasesMap := map[string][]*object.Commit{currRelease: []*object.Commit{}}
-	for _, cm := range c.commits {
+	for _, cm := range commits {
 		if r, ok := hashToReleaseMap[cm.Hash.String()]; ok {
 			currRelease = r
 			releasesMap[r] = []*object.Commit{}
@@ -125,9 +139,20 @@ func (c *changelog) Changelog() (string, error) {
 	sort.Sort(sort.Reverse(releases))
 	result := []string{}
 	for _, r := range releases {
-		result = append(result, fmt.Sprintf("\n## %s\n", r))
+		result = append(result, fmt.Sprintf("\n## %s", r))
+		release := map[string][]string{}
 		for _, cm := range releasesMap[r] {
-			result = append(result, fmt.Sprintf("* %s", strings.TrimSpace(cm.Message)))
+			if !validCommit(cm.Message) {
+				continue
+			}
+			cat, msg := formatCommit(cm.Message)
+			release[cat] = append(release[cat], msg)
+		}
+		for _, cat := range []string{"SECURITY", "FEATURE", "IMPROVEMENT", "BUGFIX", "NOTE"} {
+			if cms, ok := release[cat]; ok {
+				result = append(result, fmt.Sprintf("\n%s\n", cat))
+				result = append(result, sort.StringSlice(cms)...)
+			}
 		}
 	}
 	return strings.Join(result, "\n"), nil

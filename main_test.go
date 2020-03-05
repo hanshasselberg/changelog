@@ -53,6 +53,10 @@ func testRepo(t *testing.T) *git.Repository {
 	require.NoError(t, err)
 	ref = plumbing.NewReferenceFromStrings("refs/remotes/origin/release/1.7.x", last.String())
 	err = r.Storer.SetReference(ref)
+	last, err = commitHelper(w, `fix(agent): seven seven seven`)
+	require.NoError(t, err)
+	last, err = commitHelper(w, `eight eight eight`)
+	require.NoError(t, err)
 	require.NoError(t, err)
 
 	return r
@@ -91,28 +95,48 @@ func TestHashToRelease(t *testing.T) {
 
 	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
 	cms, err := commits(r, ref)
-	// t.Log(hashToReleaseMap)
-	// t.Log(cms)
-	release, ok := hashToReleaseMap[cms[4].Hash.String()]
+	release, ok := hashToReleaseMap[cms[6].Hash.String()]
 	require.True(t, ok)
 	require.Equal(t, "1.6.0", release)
 
-	release, ok = hashToReleaseMap[cms[2].Hash.String()]
+	release, ok = hashToReleaseMap[cms[4].Hash.String()]
 	require.True(t, ok)
 	require.Equal(t, "1.7.0", release)
 
-	release, ok = hashToReleaseMap[cms[1].Hash.String()]
+	release, ok = hashToReleaseMap[cms[3].Hash.String()]
 	require.True(t, ok)
 	require.Equal(t, "1.7.1", release)
 
 }
 
-func TestChangelogChangelog(t *testing.T) {
+func TestChangelog(t *testing.T) {
 	r := testRepo(t)
 	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
-	c, err := newChangelog(r, ref)
+	commits, err := commits(r, ref)
 	require.NoError(t, err)
-	md, err := c.Changelog()
+	hashToRelease, err := hashToRelease(r)
+	require.NoError(t, err)
+	md, err := changelog(hashToRelease, commits)
 	require.NoError(t, err)
 	t.Log(md)
+}
+
+func TestValidCommit(t *testing.T) {
+	require.True(t, validCommit("fix(agent): something something"))
+	require.True(t, validCommit("feat(agent): something something"))
+	require.True(t, validCommit("impr(agent): something something"))
+	require.True(t, validCommit("sec(agent): something something"))
+	require.True(t, validCommit("note(agent): something something"))
+	require.True(t, validCommit("feat(agent)!: something something"))
+	require.False(t, validCommit("wat(agent): something something"))
+	require.False(t, validCommit("aeoustaouesth"))
+}
+
+func TestFormatCommit(t *testing.T) {
+	cat, msg := formatCommit("fix(agent): something")
+	require.Equal(t, "BUGFIX", cat)
+	require.Equal(t, "* agent: something", msg)
+	cat, msg = formatCommit("fix(agent)!: something")
+	require.Equal(t, "BUGFIX", cat)
+	require.Equal(t, "* agent: something", msg)
 }
