@@ -48,7 +48,7 @@ func testRepo(t *testing.T) *git.Repository {
 	require.NoError(t, err)
 	_, err = r.CreateTag("v1.7.0", last, &git.CreateTagOptions{Tagger: signatureHelper(), Message: "v1.7.0"})
 	last, err = commitHelper(w, `fix(dns): five five five`)
-	_, err = r.CreateTag("v1.7.1", last, nil)
+	_, err = r.CreateTag("v1.7.1", last, &git.CreateTagOptions{Tagger: signatureHelper(), Message: "v1.7.1"})
 	last, err = commitHelper(w, `fix(dns): six six six`)
 	require.NoError(t, err)
 	ref = plumbing.NewReferenceFromStrings("refs/remotes/origin/release/1.7.x", last.String())
@@ -112,5 +112,7 @@ func TestChangelogChangelog(t *testing.T) {
 	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
 	c, err := newChangelog(r, ref)
 	require.NoError(t, err)
-	t.Log(c.Changelog())
+	md, err := c.Changelog()
+	require.NoError(t, err)
+	t.Log(md)
 }

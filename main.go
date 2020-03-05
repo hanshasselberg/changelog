@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"regexp"
@@ -10,28 +11,32 @@ import (
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
-	"gopkg.in/src-d/go-git.v4/storage/memory"
 )
 
 func main() {
-	r, err := git.Clone(memory.NewStorage(), nil, &git.CloneOptions{
-		URL: "../changelogrepo",
-	})
+	path := flag.String("path", ".", "path to repository")
+	flag.Parse()
+	r, err := git.PlainOpen(*path)
 	if err != nil {
-		fmt.Println("error cloning:", err)
+		fmt.Println("error opening:", err)
 		os.Exit(1)
 	}
 	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
 	c, err := newChangelog(r, ref)
 	if err != nil {
+		fmt.Println("error new changelog:", err)
+		os.Exit(1)
+	}
+	md, err := c.Changelog()
+	if err != nil {
 		fmt.Println("error changelog:", err)
 		os.Exit(1)
 	}
-	fmt.Println(c.Changelog())
+	fmt.Println(md)
 }
 
 var releaseBranchRegex = regexp.MustCompile(`^refs\/remotes\/\w+\/release\/\d+\.\d+\.x$`)
-var releaseTagRegex = regexp.MustCompile(`^refs\/tags\/v(\d+\.\d+\.\d+)$`)
+var releaseTagRegex = regexp.MustCompile(`^v(\d+\.\d+\.\d+)$`)
 
 func isReleaseBranch(b string) bool {
 	if b == "refs/heads/master" {
@@ -85,18 +90,14 @@ func newChangelog(r *git.Repository, b *plumbing.Reference) (*changelog, error) 
 }
 
 func hashToRelease(r *git.Repository) (map[string]string, error) {
-	ts, err := r.Tags()
+	ts, err := r.TagObjects()
 	if err != nil {
 		return nil, err
 	}
 	tagsMap := map[string]string{}
-	ts.ForEach(func(ref *plumbing.Reference) error {
-		if v := releaseTagRegex.FindStringSubmatch(ref.Name().String()); len(v) > 0 {
-			k, err := r.ResolveRevision(plumbing.Revision("v" + v[1]))
-			if err != nil {
-				return err
-			}
-			tagsMap[k.String()] = v[1]
+	ts.ForEach(func(t *object.Tag) error {
+		if v := releaseTagRegex.FindStringSubmatch(t.Name); len(v) > 0 {
+			tagsMap[t.Target.String()] = v[1]
 		}
 		return nil
 	})
@@ -126,7 +127,7 @@ func (c *changelog) Changelog() (string, error) {
 	for _, r := range releases {
 		result = append(result, fmt.Sprintf("\n## %s\n", r))
 		for _, cm := range releasesMap[r] {
-			result = append(result, fmt.Sprintf("* %s", cm.Message))
+			result = append(result, fmt.Sprintf("* %s", strings.TrimSpace(cm.Message)))
 		}
 	}
 	return strings.Join(result, "\n"), nil
