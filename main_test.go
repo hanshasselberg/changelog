@@ -1,66 +1,12 @@
 package main
 
 import (
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
-	"gopkg.in/src-d/go-billy.v4/memfs"
-	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
-	"gopkg.in/src-d/go-git.v4/storage/memory"
 )
-
-func signatureHelper() *object.Signature {
-	when, _ := time.Parse(object.DateFormat, "Thu May 04 00:03:43 2017 +0200")
-	return &object.Signature{
-		Name:  "John Doe",
-		Email: "john@doe.org",
-		When:  when,
-	}
-}
-
-func commitHelper(w *git.Worktree, msg string) (plumbing.Hash, error) {
-	return w.Commit(msg, &git.CommitOptions{
-		Author: signatureHelper(),
-	})
-}
-
-func testRepo(t *testing.T) *git.Repository {
-	r, err := git.Init(memory.NewStorage(), memfs.New())
-	require.NoError(t, err)
-
-	w, err := r.Worktree()
-	require.NoError(t, err)
-	var last plumbing.Hash
-	last, err = commitHelper(w, `fix(agent): one one one`)
-	require.NoError(t, err)
-	last, err = commitHelper(w, `fix(dns): two two two`)
-	require.NoError(t, err)
-	_, err = r.CreateTag("v1.6.0", last, &git.CreateTagOptions{Tagger: signatureHelper(), Message: "v1.6.0"})
-	require.NoError(t, err)
-	ref := plumbing.NewReferenceFromStrings("refs/remotes/origin/release/1.6.x", last.String())
-	err = r.Storer.SetReference(ref)
-	last, err = commitHelper(w, `feat(dns): three three three`)
-	require.NoError(t, err)
-	last, err = commitHelper(w, `fix(dns): four four four`)
-	require.NoError(t, err)
-	_, err = r.CreateTag("v1.7.0", last, &git.CreateTagOptions{Tagger: signatureHelper(), Message: "v1.7.0"})
-	last, err = commitHelper(w, `fix(dns): five five five`)
-	_, err = r.CreateTag("v1.7.1", last, &git.CreateTagOptions{Tagger: signatureHelper(), Message: "v1.7.1"})
-	last, err = commitHelper(w, `fix(dns): six six six`)
-	require.NoError(t, err)
-	ref = plumbing.NewReferenceFromStrings("refs/remotes/origin/release/1.7.x", last.String())
-	err = r.Storer.SetReference(ref)
-	last, err = commitHelper(w, `fix(agent): seven seven seven`)
-	require.NoError(t, err)
-	last, err = commitHelper(w, `eight eight eight`)
-	require.NoError(t, err)
-	require.NoError(t, err)
-
-	return r
-}
 
 func TestIsReleaseBranch(t *testing.T) {
 	b1 := ""
@@ -73,44 +19,32 @@ func TestIsReleaseBranch(t *testing.T) {
 	require.False(t, isReleaseBranch(b4))
 }
 
-func TestBranches(t *testing.T) {
-	r := testRepo(t)
-	bs, err := branches(r)
-	require.NoError(t, err)
-	require.Len(t, bs, 3)
-}
-
 func TestCommits(t *testing.T) {
-	r := testRepo(t)
+	r, err := testRepo()
+	require.NoError(t, err)
 	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
-	_, err := commits(r, ref)
+	_, err = commits(r, ref)
 	require.NoError(t, err)
 }
 
 func TestHashToRelease(t *testing.T) {
-	r := testRepo(t)
+	r, err := testRepo()
+	require.NoError(t, err)
 	hashToReleaseMap, err := hashToRelease(r)
 	require.NoError(t, err)
-	require.Len(t, hashToReleaseMap, 3)
+	require.Len(t, hashToReleaseMap, 1)
 
 	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
 	cms, err := commits(r, ref)
-	release, ok := hashToReleaseMap[cms[6].Hash.String()]
+	release, ok := hashToReleaseMap[cms[3].Hash.String()]
 	require.True(t, ok)
-	require.Equal(t, "1.6.0", release)
-
-	release, ok = hashToReleaseMap[cms[4].Hash.String()]
-	require.True(t, ok)
-	require.Equal(t, "1.7.0", release)
-
-	release, ok = hashToReleaseMap[cms[3].Hash.String()]
-	require.True(t, ok)
-	require.Equal(t, "1.7.1", release)
+	require.Equal(t, "1.7.3", release)
 
 }
 
 func TestChangelog(t *testing.T) {
-	r := testRepo(t)
+	r, err := testRepo()
+	require.NoError(t, err)
 	ref := plumbing.NewReferenceFromStrings("refs/heads/master", "")
 	commits, err := commits(r, ref)
 	require.NoError(t, err)
@@ -121,22 +55,44 @@ func TestChangelog(t *testing.T) {
 	t.Log(md)
 }
 
-func TestValidCommit(t *testing.T) {
-	require.True(t, validCommit("fix(agent): something something"))
-	require.True(t, validCommit("feat(agent): something something"))
-	require.True(t, validCommit("impr(agent): something something"))
-	require.True(t, validCommit("sec(agent): something something"))
-	require.True(t, validCommit("note(agent): something something"))
-	require.True(t, validCommit("feat(agent)!: something something"))
-	require.False(t, validCommit("wat(agent): something something"))
-	require.False(t, validCommit("aeoustaouesth"))
+func TestValidHeadline(t *testing.T) {
+	r, err := testRepo()
+	require.NoError(t, err)
+	w, err := r.Worktree()
+	require.NoError(t, err)
+	hash, err := commitHelper(w, 7777, "fubar")
+	require.NoError(t, err)
+	c, err := r.CommitObject(hash)
+	require.NoError(t, err)
+	headline := strings.Split(c.Message, "\n")[0]
+	require.True(t, validHeadline(headline), headline)
 }
 
-func TestFormatCommit(t *testing.T) {
-	cat, msg := formatCommit("fix(agent): something")
+func TestValidEntry(t *testing.T) {
+	require.True(t, validEntry("* fix(agent): something something"))
+	require.True(t, validEntry("* feat(agent): something something"))
+	require.True(t, validEntry("* impr(agent): something something"))
+	require.True(t, validEntry("* sec(agent): something something"))
+	require.True(t, validEntry("* note(agent): something something"))
+	require.True(t, validEntry("* feat(agent)!: something something"))
+	require.True(t, validEntry("* feat(agent):something something"))
+	require.False(t, validEntry("* wat(agent): something something"))
+	require.False(t, validEntry("* aeoustaouesth"))
+}
+
+func TestExtractCatAndChange(t *testing.T) {
+	cat, change := extractCatAndChange("fix(agent): something")
 	require.Equal(t, "BUGFIX", cat)
-	require.Equal(t, "* agent: something", msg)
-	cat, msg = formatCommit("fix(agent)!: something")
+	require.Equal(t, "* agent: something", change)
+	cat, change = extractCatAndChange("fix(agent)!: something")
 	require.Equal(t, "BUGFIX", cat)
-	require.Equal(t, "* agent: something", msg)
+	require.Equal(t, "* agent: something", change)
+}
+
+func TestEntriesFromMessage(t *testing.T) {
+	msg := "something #123\nfubar ok\n```changelog\n* fix(dns): first\n* feat(agent): second"
+	entries := entriesFromMessage(msg)
+	require.Len(t, entries, 2)
+	require.Equal(t, "* fix(dns): first", entries[0])
+	require.Equal(t, "* feat(agent): second", entries[1])
 }
