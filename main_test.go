@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/src-d/go-git.v4/plumbing"
 )
 
 func TestIsReleaseBranch(t *testing.T) {

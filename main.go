@@ -7,13 +7,14 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"text/tabwriter"
 	"time"
 
-	"gopkg.in/src-d/go-billy.v4/memfs"
-	"gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
-	"gopkg.in/src-d/go-git.v4/storage/memory"
+	"github.com/go-git/go-billy/v5/memfs"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/storage/memory"
 )
 
 func main() {
@@ -28,6 +29,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
+		fmt.Printf("Using test repo\n\n")
 		r, err = testRepo()
 		if err != nil {
 			fmt.Println("error opening:", err)
@@ -51,6 +53,17 @@ func main() {
 	if err != nil {
 		fmt.Println("error changelog:", err)
 		os.Exit(1)
+	}
+
+	if *path == "" {
+		fmt.Printf("commits: \n\n")
+		w := new(tabwriter.Writer)
+		w.Init(os.Stdout, 1, 0, 1, ' ', 0)
+		for _, c := range commits {
+			fmt.Fprintf(w, "%s\t%s\t%s\n", c.Hash.String()[0:6], hashToReleaseMap[c.Hash.String()], strings.Replace(c.Message, "\n", " ", -1))
+		}
+		w.Flush()
+		fmt.Printf("\nchangelog: \n")
 	}
 	fmt.Println(md)
 }
@@ -220,7 +233,7 @@ func testRepo() (*git.Repository, error) {
 	if err != nil {
 		return nil, err
 	}
-	last, err := commitHelper(w, 5555, `fix(dns): six six six`)
+	last, err := commitHelper(w, 5555, `fix(dns): five five five`)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +249,7 @@ func testRepo() (*git.Repository, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = commitHelper(w, 8888, `eight eight eight`)
+	_, err = commitHelper(w, 8888, `feat(agent): eight eight eight`)
 	if err != nil {
 		return nil, err
 	}

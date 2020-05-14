@@ -6,33 +6,24 @@ Works with commits formatted according to https://www.conventionalcommits.org/en
 Right now it is capable of producing the following:
 
 ```md
-## UNRELEASED
+$ go run main.go
+Using test repo
 
-BUGFIX
+commits:
 
-* agent: seven seven seven
-* dns: six six six
+b8666e       Merge pull request #8888 from hashicorp/something other notes ```changelog feat(agent): eight eight eight ```
+211436       Merge pull request #7777 from hashicorp/something other notes ```changelog feat(agent): seven seven seven ```
+8e1de7       Merge pull request #6666 from hashicorp/something other notes ```changelog fix(dns): six six six ```
+bbe023 1.7.3 Merge pull request #5555 from hashicorp/something other notes ```changelog fix(dns): five five five ```
 
-## 1.7.1
-
-BUGFIX
-
-* dns: five five five
-
-## 1.7.0
+changelog:
 
 FEATURE
 
-* dns: three three three
+* agent: eight eight eight
+* agent: seven seven seven
 
 BUGFIX
 
-* dns: four four four
-
-## 1.6.0
-
-BUGFIX
-
-* dns: two two two
-* agent: one one one
+* dns: six six six
 ```
