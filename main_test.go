@@ -76,6 +76,7 @@ func TestValidEntry(t *testing.T) {
 	require.True(t, validEntry("* note(agent): something something"))
 	require.True(t, validEntry("* feat(agent)!: something something"))
 	require.True(t, validEntry("* feat(agent):something something"))
+	require.True(t, validEntry("* feat(__agent fuu__):something something"))
 	require.False(t, validEntry("* wat(agent): something something"))
 	require.False(t, validEntry("* aeoustaouesth"))
 }

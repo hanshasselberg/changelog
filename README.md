@@ -11,8 +11,8 @@ Using test repo
 
 commits:
 
-b8666e       Merge pull request #8888 from hashicorp/something other notes ```changelog feat(agent): eight eight eight ```
-211436       Merge pull request #7777 from hashicorp/something other notes ```changelog feat(agent): seven seven seven ```
+900223       Merge pull request #8888 from hashicorp/something other notes ```changelog feat(agent): eight eight eight ```
+61ac2c       Merge pull request #7777 from hashicorp/something other notes ```changelog feat(__agent foo__): seven seven seven ```
 8e1de7       Merge pull request #6666 from hashicorp/something other notes ```changelog fix(dns): six six six ```
 bbe023 1.7.3 Merge pull request #5555 from hashicorp/something other notes ```changelog fix(dns): five five five ```
 
@@ -21,7 +21,7 @@ changelog:
 FEATURE
 
 * agent: eight eight eight
-* agent: seven seven seven
+* __agent foo__: seven seven seven
 
 BUGFIX
 

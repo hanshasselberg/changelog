@@ -126,7 +126,7 @@ func hashToRelease(r *git.Repository) (map[string]string, error) {
 }
 
 var headlineRegex = regexp.MustCompile(`#\d{4,5}`)
-var entryRegex = regexp.MustCompile(`^\*? ?(fix|feat|impr|sec|note)\((\w+)\)!?:(.*)(\(#\d+\))?`)
+var entryRegex = regexp.MustCompile(`^\*? ?(fix|feat|impr|sec|note)\(([a-zA-Z_~* ]+)\)!?:(.*)(\(#\d+\))?`)
 
 func validHeadline(line string) bool {
 	return headlineRegex.MatchString(line)
@@ -245,7 +245,7 @@ func testRepo() (*git.Repository, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = commitHelper(w, 7777, `feat(agent): seven seven seven`)
+	_, err = commitHelper(w, 7777, `feat(__agent foo__): seven seven seven`)
 	if err != nil {
 		return nil, err
 	}
